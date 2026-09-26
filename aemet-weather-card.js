@@ -93,7 +93,6 @@ class AemetWeatherCard extends LitElement {
     }
   }
 
-  // Renderizado de iconos coloridos en SVG
   renderWeatherIcon(state, size = 32) {
     const s = state ? state.toLowerCase() : 'cloudy';
 
@@ -160,6 +159,15 @@ class AemetWeatherCard extends LitElement {
     return directions[bearing] || 0;
   }
 
+  // Color distintivo según el nivel de riesgo del Índice UV
+  getUvColorClass(uvVal) {
+    if (uvVal >= 11) return 'uv-extreme';
+    if (uvVal >= 8) return 'uv-very-high';
+    if (uvVal >= 6) return 'uv-high';
+    if (uvVal >= 3) return 'uv-moderate';
+    return 'uv-low';
+  }
+
   _getFallbackDaily() {
     if (!this._hourlyForecast || this._hourlyForecast.length === 0) return [];
     
@@ -213,7 +221,6 @@ class AemetWeatherCard extends LitElement {
       }
     });
 
-    // Excluir el día actual y tomar solo los datos reales existentes devueltos por AEMET
     const todayStr = new Date().toISOString().split('T')[0];
     const dailyList = Object.values(combinedDailyMap)
       .filter(item => item.datetime && !item.datetime.startsWith(todayStr));
@@ -239,6 +246,9 @@ class AemetWeatherCard extends LitElement {
                   const rainProb = item.precipitation_probability ?? 0;
                   const windSpeed = Math.round(item.wind_speed ?? 0);
                   const windBearing = this.getWindRotation(item.wind_bearing);
+                  
+                  // Extracción de índice UV (si la API lo incluye en la previsión por horas)
+                  const uvVal = item.uv_index !== undefined ? Math.round(item.uv_index) : 0;
 
                   const offsetY = 70 - (((temp - minTemp) / tempRange) * 50);
 
@@ -266,6 +276,10 @@ class AemetWeatherCard extends LitElement {
                         ></ha-icon>
                         <span>${windSpeed} km/h</span>
                       </div>
+
+                      <div class="info-row uv-row">
+                        <span class="uv-badge ${this.getUvColorClass(uvVal)}">UV ${uvVal}</span>
+                      </div>
                     </div>
                   `;
                 })}
@@ -275,7 +289,6 @@ class AemetWeatherCard extends LitElement {
 
           <div class="divider"></div>
 
-          <!-- SECCIÓN PREVISIÓN PRÓXIMOS DÍAS -->
           <div class="header-title">Previsión Próximos Días</div>
           ${dailyList.length > 0 ? html`
             <div class="daily-grid">
@@ -410,7 +423,7 @@ class AemetWeatherCard extends LitElement {
 
       .info-row {
         border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
-        padding: 8px 2px;
+        padding: 6px 2px;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -427,6 +440,23 @@ class AemetWeatherCard extends LitElement {
         --mdc-icon-size: 16px;
         margin-bottom: 2px;
       }
+
+      /* ESTILOS PARA EL ÍNDICE UV */
+      .uv-row {
+        min-height: 28px;
+      }
+      .uv-badge {
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 2px 5px;
+        border-radius: 6px;
+        color: #ffffff;
+      }
+      .uv-low { background-color: #4CAF50; }
+      .uv-moderate { background-color: #FBC02D; color: #000; }
+      .uv-high { background-color: #FB8C00; }
+      .uv-very-high { background-color: #E53935; }
+      .uv-extreme { background-color: #8E24AA; }
 
       .daily-grid {
         display: flex;

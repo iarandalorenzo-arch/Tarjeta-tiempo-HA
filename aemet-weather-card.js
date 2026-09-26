@@ -43,7 +43,6 @@ class AemetWeatherCard extends LitElement {
   async _subscribeForecasts() {
     if (!this.hass || !this.config.entity) return;
 
-    // 1. Obtener previsión horaria
     if (!this._subscribedHourly) {
       this._subscribedHourly = true;
       try {
@@ -61,21 +60,16 @@ class AemetWeatherCard extends LitElement {
           }
         );
       } catch (e) {
-        console.warn("Suscripción horaria fallida, buscando fallback", e);
+        console.warn("Error cargando predicción horaria", e);
       }
     }
 
-    // 2. Obtener previsión diaria (prueba en la entidad base o en la entidad daily de AEMET)
     if (!this._subscribedDaily) {
       this._subscribedDaily = true;
-      
-      // Averiguar la entidad diaria (AEMET suele crear weather.aemet_diaria o similar)
       let dailyEntity = this.config.entity;
       if (!this.hass.states[dailyEntity]?.attributes?.forecast) {
         const potentialDaily = dailyEntity.replace('hourly', 'daily').replace('_casa', '_casa_daily');
-        if (this.hass.states[potentialDaily]) {
-          dailyEntity = potentialDaily;
-        }
+        if (this.hass.states[potentialDaily]) dailyEntity = potentialDaily;
       }
 
       try {
@@ -93,22 +87,9 @@ class AemetWeatherCard extends LitElement {
           }
         );
       } catch (e) {
-        console.warn("Suscripción diaria fallida", e);
+        console.warn("Error cargando predicción diaria", e);
       }
     }
-
-    // Fallback: leer atributos antiguos si existen en el estado
-    const stateObj = this.hass.states[this.config.entity];
-    if (this._hourlyForecast.length === 0 && stateObj?.attributes?.forecast) {
-      this._hourlyForecast = stateObj.attributes.forecast;
-    }
-  }
-
-  getUvColor(uv) {
-    if (uv === undefined || uv === null) return "var(--primary-text-color)";
-    const val = Math.min(Math.max(uv, 0), 11);
-    const hue = 210 - (val * 19);
-    return `hsl(${hue}, 90%, 50%)`;
   }
 
   getWeatherIcon(state) {
@@ -127,6 +108,13 @@ class AemetWeatherCard extends LitElement {
     return icons[state] || 'mdi:weather-cloudy';
   }
 
+  // Convierte rumbo en grados o cardinal a rotación de flecha
+  getWindRotation(bearing) {
+    if (typeof bearing === 'number') return bearing;
+    const directions = { 'N': 0, 'NE': 45, 'E': 90, 'SE': 135, 'S': 180, 'SW': 225, 'W': 270, 'NW': 315 };
+    return directions[bearing] || 0;
+  }
+
   render() {
     if (!this.hass || !this.config) return html``;
 
@@ -135,65 +123,64 @@ class AemetWeatherCard extends LitElement {
       return html`<ha-card><div class="error">Entidad no encontrada: ${this.config.entity}</div></ha-card>`;
     }
 
-    const hourly12 = this._hourlyForecast.slice(0, 12);
-    const daily7 = this._dailyForecast.length > 0 ? this._dailyForecast.slice(0, 7) : this._hourlyForecast.slice(0, 7);
+    const hourly12 = this._hourlyForecast.slice(0, 14);
+
+    // Cálculo para desplazar verticalmente la temperatura simulando la gráfica
+    const temps = hourly12.map(i => i.temperature ?? 0);
+    const minTemp = Math.min(...(temps.length ? temps : [0]));
+    const maxTemp = Math.max(...(temps.length ? temps : [30]));
+    const tempRange = (maxTemp - minTemp) || 1;
 
     return html`
       <ha-card>
         <div class="card-content">
-          
-          <!-- SECCIÓN 1: PREDICCIÓN HORARIA (12 HORAS SCROLL) -->
-          <div class="section-title">Previsión 12 horas</div>
-          <div class="hourly-carousel">
-            ${hourly12.length > 0 ? hourly12.map((item) => {
+          <div class="header-title">Hoy</div>
+
+          <div class="eltiempo-container">
+            ${hourly12.map((item) => {
               const date = new Date(item.datetime);
               const hourStr = !isNaN(date.getTime()) ? `${date.getHours().toString().padStart(2, '0')}:00` : '--:--';
-              const uvVal = item.uv_index ?? item.uv ?? 0;
-              const rainVal = item.precipitation ?? item.precipitation_probability ?? 0;
-              const uvColor = this.getUvColor(uvVal);
+              const temp = Math.round(item.temperature ?? 0);
+              const rainMm = item.precipitation ?? 0;
+              const rainProb = item.precipitation_probability ?? 0;
+              const windSpeed = Math.round(item.wind_speed ?? 0);
+              const windBearing = this.getWindRotation(item.wind_bearing);
+
+              // Porcentaje de altura entre 10px y 70px para hacer el efecto de curva
+              const offsetY = 70 - (((temp - minTemp) / tempRange) * 50);
 
               return html`
-                <div class="hour-card">
-                  <span class="hour-time">${hourStr}</span>
-                  <ha-icon icon="${this.getWeatherIcon(item.condition || stateObj.state)}"></ha-icon>
-                  <span class="temp">${Math.round(item.temperature ?? 0)}°C</span>
-                  
-                  <div class="sub-info rain">
-                    <ha-icon icon="mdi:water-outline"></ha-icon>
-                    <span>${rainVal}${item.precipitation !== undefined ? 'mm' : '%'}</span>
+                <div class="hour-column">
+                  <!-- 1. HORA -->
+                  <div class="col-header">${hourStr}</div>
+
+                  <!-- 2. ICONO + TEMPERATURA CON ALTURA DINÁMICA -->
+                  <div class="temp-plot-area">
+                    <div class="temp-point" style="transform: translateY(${offsetY}px);">
+                      <ha-icon icon="${this.getWeatherIcon(item.condition)}"></ha-icon>
+                      <span class="temp-val">${temp} °</span>
+                    </div>
                   </div>
 
-                  <div class="sub-info uv" style="color: ${uvColor}">
-                    <ha-icon icon="mdi:white-balance-sunny" style="color: ${uvColor}"></ha-icon>
-                    <span>${Math.round(uvVal)}</span>
+                  <!-- 3. LLUVIA (mm y %) -->
+                  <div class="info-row rain-row">
+                    <span>${rainMm} mm</span>
+                    <span class="sub-percent">${rainProb}%</span>
+                  </div>
+
+                  <!-- 4. VIENTO (Flecha + km/h) -->
+                  <div class="info-row wind-row">
+                    <ha-icon 
+                      icon="mdi:arrow-down" 
+                      style="transform: rotate(${windBearing}deg);"
+                      class="wind-arrow"
+                    ></ha-icon>
+                    <span>${windSpeed} km/h</span>
                   </div>
                 </div>
               `;
-            }) : html`<div class="no-data">Obteniendo previsión horaria...</div>`}
+            })}
           </div>
-
-          <div class="divider"></div>
-
-          <!-- SECCIÓN 2: PREDICCIÓN 7 DÍAS (HORIZONTAL) -->
-          <div class="section-title">Previsión 7 días</div>
-          <div class="daily-grid">
-            ${daily7.length > 0 ? daily7.map((item) => {
-              const date = new Date(item.datetime);
-              const dayName = !isNaN(date.getTime()) ? date.toLocaleDateString('es-ES', { weekday: 'short' }) : '---';
-
-              return html`
-                <div class="day-card">
-                  <span class="day-name">${dayName}</span>
-                  <ha-icon icon="${this.getWeatherIcon(item.condition)}"></ha-icon>
-                  <div class="temp-range">
-                    <span class="max">${Math.round(item.temperature ?? 0)}°</span>
-                    <span class="min">${Math.round(item.templow ?? item.temperature_low ?? 0)}°</span>
-                  </div>
-                </div>
-              `;
-            }) : html`<div class="no-data">Obteniendo previsión diaria...</div>`}
-          </div>
-
         </div>
       </ha-card>
     `;
@@ -202,130 +189,105 @@ class AemetWeatherCard extends LitElement {
   static get styles() {
     return css`
       ha-card {
-        background: rgba(255, 255, 255, 0.04);
-        border-radius: 16px;
-        backdrop-filter: blur(8px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        background: var(--card-background-color, #ffffff);
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        overflow: hidden;
       }
       .card-content {
         padding: 16px;
       }
-      .section-title {
-        font-size: 0.9rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--secondary-text-color);
+      .header-title {
+        font-size: 1.1rem;
+        font-weight: 700;
         margin-bottom: 12px;
-      }
-      .divider {
-        height: 1px;
-        background: rgba(255, 255, 255, 0.08);
-        margin: 16px 0;
+        color: var(--primary-text-color);
       }
 
-      /* CARRUSEL HORARIO */
-      .hourly-carousel {
+      /* CONTENEDOR HORIZONTAL SCROLL */
+      .eltiempo-container {
         display: flex;
         overflow-x: auto;
-        gap: 12px;
-        padding-bottom: 8px;
+        padding-bottom: 6px;
         scrollbar-width: thin;
-        scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+        scrollbar-color: #0d6efd rgba(0, 0, 0, 0.05);
       }
-      .hourly-carousel::-webkit-scrollbar {
-        height: 4px;
+      .eltiempo-container::-webkit-scrollbar {
+        height: 6px;
       }
-      .hourly-carousel::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 4px;
+      .eltiempo-container::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 3px;
       }
-      .hour-card {
-        flex: 0 0 auto;
-        width: 65px;
+      .eltiempo-container::-webkit-scrollbar-thumb {
+        background: #0d6efd;
+        border-radius: 3px;
+      }
+
+      /* COLUMNA INDIVIDUAL POR HORA */
+      .hour-column {
+        flex: 0 0 68px;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+        text-align: center;
+      }
+      .hour-column:last-child {
+        border-right: none;
+      }
+
+      .col-header {
+        font-size: 0.85rem;
+        color: var(--secondary-text-color);
+        padding-bottom: 8px;
+      }
+
+      /* ÁREA DE GRÁFICO TÉRMICO VERTICAL */
+      .temp-plot-area {
+        height: 140px;
+        position: relative;
+      }
+      .temp-point {
         display: flex;
         flex-direction: column;
         align-items: center;
-        background: rgba(255, 255, 255, 0.03);
-        padding: 10px 6px;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.04);
+        transition: transform 0.3s ease;
       }
-      .hour-time {
-        font-size: 0.8rem;
-        color: var(--secondary-text-color);
-        margin-bottom: 4px;
+      .temp-point ha-icon {
+        --mdc-icon-size: 26px;
+        color: #f59e0b;
       }
-      .hour-card ha-icon {
-        --mdc-icon-size: 24px;
-        margin: 4px 0;
-      }
-      .temp {
+      .temp-val {
         font-weight: 600;
         font-size: 0.95rem;
-        margin-bottom: 6px;
-      }
-      .sub-info {
-        display: flex;
-        align-items: center;
-        gap: 2px;
-        font-size: 0.75rem;
-      }
-      .sub-info ha-icon {
-        --mdc-icon-size: 12px;
-      }
-      .rain {
-        color: #64b5f6;
+        margin-top: 2px;
+        color: var(--primary-text-color);
       }
 
-      /* PREDICCIÓN DIARIA */
-      .daily-grid {
-        display: flex;
-        justify-content: space-between;
-        gap: 8px;
-        overflow-x: auto;
-      }
-      .day-card {
-        flex: 1;
-        min-width: 45px;
+      /* FILAS DE INFORMACIÓN (LLUVIA Y VIENTO) */
+      .info-row {
+        border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
+        padding: 8px 2px;
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 8px 4px;
-        background: rgba(255, 255, 255, 0.02);
-        border-radius: 10px;
+        font-size: 0.78rem;
+        color: var(--primary-text-color);
+        min-height: 36px;
+        justify-content: center;
       }
-      .day-name {
-        font-size: 0.8rem;
-        text-transform: capitalize;
+      .sub-percent {
         color: var(--secondary-text-color);
+        font-size: 0.72rem;
       }
-      .day-card ha-icon {
-        --mdc-icon-size: 22px;
-        margin: 6px 0;
-      }
-      .temp-range {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        font-size: 0.8rem;
-      }
-      .max {
-        font-weight: 600;
-      }
-      .min {
-        color: var(--secondary-text-color);
-        font-size: 0.75rem;
+      .wind-arrow {
+        --mdc-icon-size: 16px;
+        margin-bottom: 2px;
+        transition: transform 0.3s ease;
       }
       .error {
         padding: 16px;
         color: var(--error-color);
-      }
-      .no-data {
-        color: var(--secondary-text-color);
-        font-size: 0.85rem;
-        padding: 8px 0;
       }
     `;
   }

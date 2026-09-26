@@ -9,7 +9,15 @@ class AemetWeatherCard extends LitElement {
     return {
       hass: {},
       config: {},
+      _hourlyForecast: { type: Array },
+      _dailyForecast: { type: Array }
     };
+  }
+
+  constructor() {
+    super();
+    this._hourlyForecast = [];
+    this._dailyForecast = [];
   }
 
   setConfig(config) {
@@ -17,6 +25,57 @@ class AemetWeatherCard extends LitElement {
       throw new Error("Debes definir la entidad 'entity' (ej. weather.forecast_casa)");
     }
     this.config = config;
+  }
+
+  // Se ejecuta automáticamente al cargar o actualizar la tarjeta en Home Assistant
+  updated(changedProperties) {
+    if (changedProperties.has('hass') && this.hass && this.config) {
+      const oldHass = changedProperties.get('hass');
+      if (!oldHass || oldHass.states[this.config.entity] !== this.hass.states[this.config.entity]) {
+        this._fetchForecasts();
+      }
+    }
+  }
+
+  // Llamada moderna a la API de previsión de Home Assistant (AEMET)
+  async _fetchForecasts() {
+    if (!this.hass || !this.config.entity) return;
+
+    try {
+      // Intentamos pedir la previsión horaria mediante el servicio moderno
+      const resHourly = await this.hass.callWS({
+        type: 'weather/subscribe_forecast',
+        entity_id: this.config.entity,
+        forecast_type: 'hourly'
+      });
+      if (resHourly && resHourly.forecast) {
+        this._hourlyForecast = resHourly.forecast;
+      }
+    } catch (e) {
+      // Si falla la suscripción WS, leemos los atributos tradicionales por fallback
+      const stateObj = this.hass.states[this.config.entity];
+      if (stateObj && stateObj.attributes && stateObj.attributes.forecast) {
+        this._hourlyForecast = stateObj.attributes.forecast;
+      }
+    }
+
+    try {
+      // Intentamos pedir la previsión diaria
+      const resDaily = await this.hass.callWS({
+        type: 'weather/subscribe_forecast',
+        entity_id: this.config.entity,
+        forecast_type: 'daily'
+      });
+      if (resDaily && resDaily.forecast) {
+        this._dailyForecast = resDaily.forecast;
+      }
+    } catch (e) {
+      const dailyEntityId = this.config.entity.replace('hourly', 'daily');
+      const dailyObj = this.hass.states[dailyEntityId] || this.hass.states['weather.forecast_casa_daily'];
+      if (dailyObj && dailyObj.attributes && dailyObj.attributes.forecast) {
+        this._dailyForecast = dailyObj.attributes.forecast;
+      }
+    }
   }
 
   getUvColor(uv) {
@@ -50,26 +109,8 @@ class AemetWeatherCard extends LitElement {
       return html`<ha-card><div class="error">Entidad no encontrada: ${this.config.entity}</div></ha-card>`;
     }
 
-    // Buscamos la previsión en atributos directos o en la entidad diaria de AEMET
-    let forecastHourly = stateObj.attributes.forecast || stateObj.attributes.forecast_hourly || [];
-    let forecastDaily = stateObj.attributes.forecast_daily || [];
-
-    // Si la entidad principal no tiene la previsión diaria, intentamos leer la entidad diaria de AEMET
-    if (forecastDaily.length === 0) {
-      const dailyEntityId = this.config.entity.replace('_hourly', '').replace('forecast_', 'forecast_daily_');
-      const dailyObj = this.hass.states[dailyEntityId] || this.hass.states['weather.forecast_casa_daily'] || this.hass.states['weather.aemet_daily'];
-      if (dailyObj && dailyObj.attributes) {
-        forecastDaily = dailyObj.attributes.forecast || dailyObj.attributes.forecast_daily || [];
-      }
-    }
-
-    // Si la previsión horaria sigue vacía, usamos la lista disponible
-    if (forecastHourly.length === 0 && forecastDaily.length > 0) {
-      forecastHourly = forecastDaily;
-    }
-
-    const hourly12 = forecastHourly.slice(0, 12);
-    const daily7 = forecastDaily.length > 0 ? forecastDaily.slice(0, 7) : forecastHourly.slice(0, 7);
+    const hourly12 = this._hourlyForecast.slice(0, 12);
+    const daily7 = this._dailyForecast.slice(0, 7);
 
     return html`
       <ha-card>
@@ -102,7 +143,7 @@ class AemetWeatherCard extends LitElement {
                   </div>
                 </div>
               `;
-            }) : html`<div class="no-data">Cargando datos horarios...</div>`}
+            }) : html`<div class="no-data">Obteniendo previsión horaria de AEMET...</div>`}
           </div>
 
           <div class="divider"></div>
@@ -120,11 +161,11 @@ class AemetWeatherCard extends LitElement {
                   <ha-icon icon="${this.getWeatherIcon(item.condition)}"></ha-icon>
                   <div class="temp-range">
                     <span class="max">${Math.round(item.temperature ?? 0)}°</span>
-                    <span class="min">${Math.round(item.templow ?? item.temperature_low ?? item.templow_day ?? 0)}°</span>
+                    <span class="min">${Math.round(item.templow ?? item.temperature_low ?? 0)}°</span>
                   </div>
                 </div>
               `;
-            }) : html`<div class="no-data">Cargando datos diarios...</div>`}
+            }) : html`<div class="no-data">Obteniendo previsión diaria de AEMET...</div>`}
           </div>
 
         </div>

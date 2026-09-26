@@ -133,7 +133,7 @@ class AemetWeatherCard extends LitElement {
       }
     });
 
-    return Object.values(daysMap).slice(0, 7).map(d => ({
+    return Object.values(daysMap).map(d => ({
       datetime: d.datetime,
       condition: d.condition,
       temperature: Math.max(...d.temperatures),
@@ -153,9 +153,15 @@ class AemetWeatherCard extends LitElement {
       ? this._hourlyForecast 
       : (stateObj.attributes?.forecast || []);
 
-    const dailyList = this._dailyForecast.length > 0 
-      ? this._dailyForecast.slice(0, 7) 
+    const rawDailyList = this._dailyForecast.length > 0 
+      ? this._dailyForecast 
       : this._getFallbackDaily();
+
+    // Filtramos para ignorar el día de hoy y obtener los 7 días posteriores
+    const todayStr = new Date().toISOString().split('T')[0];
+    const dailyList = rawDailyList
+      .filter(item => item.datetime && !item.datetime.startsWith(todayStr))
+      .slice(0, 7);
 
     const temps = hourlyList.map(i => i.temperature ?? 0);
     const minTemp = temps.length ? Math.min(...temps) : 0;
@@ -214,8 +220,8 @@ class AemetWeatherCard extends LitElement {
 
           <div class="divider"></div>
 
-          <!-- SECCIÓN PREVISIÓN 7 DÍAS -->
-          <div class="header-title">Previsión 7 Días</div>
+          <!-- SECCIÓN PREVISIÓN 7 DÍAS POSTERIORES -->
+          <div class="header-title">Previsión Próximos 7 Días</div>
           ${dailyList.length > 0 ? html`
             <div class="daily-grid">
               ${dailyList.map((item) => {
@@ -276,7 +282,6 @@ class AemetWeatherCard extends LitElement {
         margin: 20px 0 16px 0;
       }
 
-      /* AISLAMIENTO DE SCROLL HORIZONTAL */
       .scroll-wrapper {
         width: 100%;
         max-width: 100%;
@@ -370,7 +375,6 @@ class AemetWeatherCard extends LitElement {
         margin-bottom: 2px;
       }
 
-      /* PREDICCIÓN 7 DÍAS */
       .daily-grid {
         display: flex;
         justify-content: space-between;

@@ -229,7 +229,6 @@ class AemetWeatherCard extends LitElement {
     const maxTemp = temps.length ? Math.max(...temps) : 30;
     const tempRange = (maxTemp - minTemp) || 1;
 
-    // Comprobación de parámetro de configuración (por defecto true si no se especifica)
     const showDaily = this.config.show_daily !== false;
 
     return html`
@@ -363,6 +362,8 @@ class AemetWeatherCard extends LitElement {
 
       .eltiempo-container {
         display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
         overflow-x: auto;
         overflow-y: hidden;
         width: 100%;

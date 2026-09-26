@@ -93,20 +93,65 @@ class AemetWeatherCard extends LitElement {
     }
   }
 
-  getWeatherIcon(state) {
-    const icons = {
-      'sunny': 'mdi:weather-sunny',
-      'clear-night': 'mdi:weather-night',
-      'partlycloudy': 'mdi:weather-partly-cloudy',
-      'cloudy': 'mdi:weather-cloudy',
-      'fog': 'mdi:weather-fog',
-      'rainy': 'mdi:weather-rainy',
-      'pouring': 'mdi:weather-pouring',
-      'lightning-rainy': 'mdi:weather-lightning-rainy',
-      'snowy': 'mdi:weather-snowy',
-      'windy': 'mdi:weather-windy'
-    };
-    return icons[state] || 'mdi:weather-cloudy';
+  // Renderizado de iconos coloridos en SVG
+  renderWeatherIcon(state, size = 32) {
+    const s = state ? state.toLowerCase() : 'cloudy';
+
+    if (s.includes('sunny') || s.includes('clear')) {
+      return html`
+        <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none">
+          <circle cx="32" cy="32" r="14" fill="#FFB300"/>
+          <circle cx="32" cy="32" r="18" fill="#FFC107" fill-opacity="0.3"/>
+          <path d="M32 4V10M32 54V60M4 32H10M54 32H60M12.2 12.2L16.4 16.4M47.6 47.6L51.8 51.8M12.2 51.8L16.4 47.6M47.6 16.4L51.8 12.2" stroke="#FF9800" stroke-width="4" stroke-linecap="round"/>
+        </svg>
+      `;
+    }
+
+    if (s.includes('partly')) {
+      return html`
+        <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none">
+          <circle cx="24" cy="22" r="11" fill="#FFC107"/>
+          <path d="M46 48H22C16.5 48 12 43.5 12 38C12 33 15.8 28.8 20.7 28.1C22.3 22.3 27.6 18 34 18C41.7 18 48 24.3 48 32C51.3 32.5 54 35.5 54 39C54 44 50 48 46 48Z" fill="#90CAF9"/>
+          <path d="M42 48H22C17.6 48 14 44.4 14 40C14 36 17 32.7 21 32C22.5 27 27 23 32.5 23C38.8 23 44 28.2 44 34.5C47 35 49 37.5 49 40.5C49 44.5 46 48 42 48Z" fill="#E3F2FD"/>
+        </svg>
+      `;
+    }
+
+    if (s.includes('rain') || s.includes('pouring')) {
+      return html`
+        <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none">
+          <path d="M46 38H20C15.6 38 12 34.4 12 30C12 26 15 22.7 19 22C20.5 17 25 13 30.5 13 C36.8 13 42 18.2 42 24.5C45 25 47 27.5 47 30.5C47 34.5 44 38 46 38Z" fill="#78909C"/>
+          <path d="M22 44L18 52M32 44L28 52M42 44L38 52" stroke="#29B6F6" stroke-width="3.5" stroke-linecap="round"/>
+        </svg>
+      `;
+    }
+
+    if (s.includes('lightning')) {
+      return html`
+        <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none">
+          <path d="M44 34H20C16 34 13 30.5 13 26.5C13 22.8 15.8 19.7 19.5 19.1C21 14.5 25.2 11 30.5 11C36.8 11 42 16.2 42 22.5C45 23 47 25.5 47 28.5C47 31.5 44 34 44 34Z" fill="#546E7A"/>
+          <path d="M30 32L22 44H30L26 56L38 40H30L34 32H30Z" fill="#FFD54F" stroke="#FFB300" stroke-width="1"/>
+        </svg>
+      `;
+    }
+
+    if (s.includes('snow')) {
+      return html`
+        <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none">
+          <path d="M46 36H20C15.6 36 12 32.4 12 28C12 24 15 20.7 19 20C20.5 15 25 11 30.5 11C36.8 11 42 16.2 42 22.5C45 23 47 25.5 47 28.5C47 32.5 44 36 46 36Z" fill="#B0BEC5"/>
+          <circle cx="20" cy="46" r="2.5" fill="#E0F7FA"/>
+          <circle cx="32" cy="48" r="3" fill="#E0F7FA"/>
+          <circle cx="44" cy="45" r="2.5" fill="#E0F7FA"/>
+        </svg>
+      `;
+    }
+
+    return html`
+      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none">
+        <path d="M46 42H20C15.6 42 12 38.4 12 34C12 30 15 26.7 19 26C20.5 21 25 17 30.5 17C36.8 17 42 22.2 42 28.5C45 29 47 31.5 47 34.5C47 38.5 44 42 46 42Z" fill="#90A4AE"/>
+        <path d="M42 44H24C20.1 44 17 40.9 17 37C17 33.5 19.6 30.6 23.1 30C24.4 25.6 28.4 22 33.3 22C38.8 22 43.4 26.6 43.4 32.1C46 32.6 48 34.8 48 37.5C48 41.1 45.3 44 42 44Z" fill="#CFD8DC"/>
+      </svg>
+    `;
   }
 
   getWindRotation(bearing) {
@@ -153,17 +198,14 @@ class AemetWeatherCard extends LitElement {
       ? this._hourlyForecast 
       : (stateObj.attributes?.forecast || []);
 
-    // Combinar previsión diaria con fallback por horas para rellenar si faltan días
     const fallbackDaily = this._getFallbackDaily();
     const combinedDailyMap = {};
 
-    // Primero insertamos el fallback
     fallbackDaily.forEach(item => {
       const dateStr = item.datetime.split('T')[0];
       combinedDailyMap[dateStr] = item;
     });
 
-    // Luego sobrescribimos con los datos diarios reales (tienen mayor precisión)
     this._dailyForecast.forEach(item => {
       if (item.datetime) {
         const dateStr = item.datetime.split('T')[0];
@@ -171,13 +213,10 @@ class AemetWeatherCard extends LitElement {
       }
     });
 
-    const rawDailyList = Object.values(combinedDailyMap);
-
-    // Excluir el día de hoy y tomar los 7 días posteriores
+    // Excluir el día actual y tomar solo los datos reales existentes devueltos por AEMET
     const todayStr = new Date().toISOString().split('T')[0];
-    const dailyList = rawDailyList
-      .filter(item => item.datetime && !item.datetime.startsWith(todayStr))
-      .slice(0, 7);
+    const dailyList = Object.values(combinedDailyMap)
+      .filter(item => item.datetime && !item.datetime.startsWith(todayStr));
 
     const temps = hourlyList.map(i => i.temperature ?? 0);
     const minTemp = temps.length ? Math.min(...temps) : 0;
@@ -209,7 +248,7 @@ class AemetWeatherCard extends LitElement {
 
                       <div class="temp-plot-area">
                         <div class="temp-point" style="transform: translateY(${offsetY}px);">
-                          <ha-icon icon="${this.getWeatherIcon(item.condition)}"></ha-icon>
+                          ${this.renderWeatherIcon(item.condition, 28)}
                           <span class="temp-val">${temp}°</span>
                         </div>
                       </div>
@@ -236,8 +275,8 @@ class AemetWeatherCard extends LitElement {
 
           <div class="divider"></div>
 
-          <!-- SECCIÓN PREVISIÓN 7 DÍAS POSTERIORES -->
-          <div class="header-title">Previsión Próximos 7 Días</div>
+          <!-- SECCIÓN PREVISIÓN PRÓXIMOS DÍAS -->
+          <div class="header-title">Previsión Próximos Días</div>
           ${dailyList.length > 0 ? html`
             <div class="daily-grid">
               ${dailyList.map((item) => {
@@ -247,7 +286,9 @@ class AemetWeatherCard extends LitElement {
                 return html`
                   <div class="day-card">
                     <span class="day-name">${dayName}</span>
-                    <ha-icon icon="${this.getWeatherIcon(item.condition)}"></ha-icon>
+                    <div class="icon-container">
+                      ${this.renderWeatherIcon(item.condition, 34)}
+                    </div>
                     <div class="temp-range">
                       <span class="max">${Math.round(item.temperature ?? 0)}°</span>
                       <span class="min">${Math.round(item.templow ?? item.temperature_low ?? 0)}°</span>
@@ -256,7 +297,7 @@ class AemetWeatherCard extends LitElement {
                 `;
               })}
             </div>
-          ` : html`<div class="no-data">Cargando previsión de 7 días...</div>`}
+          ` : html`<div class="no-data">Cargando previsión diaria...</div>`}
 
         </div>
       </ha-card>
@@ -360,10 +401,6 @@ class AemetWeatherCard extends LitElement {
         align-items: center;
         transition: transform 0.3s ease;
       }
-      .temp-point ha-icon {
-        --mdc-icon-size: 26px;
-        color: #f59e0b;
-      }
       .temp-val {
         font-weight: 600;
         font-size: 0.95rem;
@@ -399,7 +436,7 @@ class AemetWeatherCard extends LitElement {
       }
       .day-card {
         flex: 1;
-        min-width: 48px;
+        min-width: 52px;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -414,10 +451,11 @@ class AemetWeatherCard extends LitElement {
         text-transform: capitalize;
         color: var(--secondary-text-color);
       }
-      .day-card ha-icon {
-        --mdc-icon-size: 24px;
+      .icon-container {
         margin: 6px 0;
-        color: #f59e0b;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .temp-range {
         display: flex;

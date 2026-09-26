@@ -66,7 +66,6 @@ class AemetWeatherCard extends LitElement {
 
     if (!this._subscribedDaily) {
       this._subscribedDaily = true;
-      
       let dailyEntity = this.config.entity;
       if (dailyEntity.includes('hourly')) {
         dailyEntity = dailyEntity.replace('hourly', 'daily');
@@ -247,7 +246,7 @@ class AemetWeatherCard extends LitElement {
       :host {
         display: block;
         width: 100%;
-        max-width: 100%;
+        min-width: 0;
         box-sizing: border-box;
       }
       ha-card {
@@ -256,13 +255,13 @@ class AemetWeatherCard extends LitElement {
         box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         overflow: hidden;
         width: 100%;
-        max-width: 100%;
+        min-width: 0;
         box-sizing: border-box;
       }
       .card-content {
         padding: 16px;
         width: 100%;
-        max-width: 100%;
+        min-width: 0;
         box-sizing: border-box;
       }
       .header-title {
@@ -277,24 +276,27 @@ class AemetWeatherCard extends LitElement {
         margin: 20px 0 16px 0;
       }
 
-      /* ENVOLTORIO QUE CONTROLA EL DESBORDAMIENTO */
+      /* AISLAMIENTO DE SCROLL HORIZONTAL */
       .scroll-wrapper {
         width: 100%;
+        max-width: 100%;
         min-width: 0;
-        overflow: hidden;
+        display: block;
+        position: relative;
       }
 
-      /* CARRUSEL HORARIO SCROLLEABLE */
       .eltiempo-container {
         display: flex;
         overflow-x: auto;
         overflow-y: hidden;
         width: 100%;
+        max-width: 100%;
         padding-bottom: 8px;
         scrollbar-width: thin;
         scrollbar-color: #0d6efd rgba(0, 0, 0, 0.05);
         -webkit-overflow-scrolling: touch;
       }
+
       .eltiempo-container::-webkit-scrollbar {
         height: 6px;
       }
@@ -309,7 +311,8 @@ class AemetWeatherCard extends LitElement {
 
       .hour-column {
         flex: 0 0 68px;
-        width: 68px;
+        min-width: 68px;
+        max-width: 68px;
         display: flex;
         flex-direction: column;
         border-right: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));

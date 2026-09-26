@@ -19,15 +19,13 @@ class AemetWeatherCard extends LitElement {
     this.config = config;
   }
 
-  // Función para calcular el color del sol del índice UV (de azul UV=0 a rojo intenso UV>=11)
   getUvColor(uv) {
     if (uv === undefined || uv === null) return "var(--primary-text-color)";
     const val = Math.min(Math.max(uv, 0), 11);
-    const hue = 210 - (val * 19); // 210 (azul) a ~0 (rojo)
+    const hue = 210 - (val * 19);
     return `hsl(${hue}, 90%, 50%)`;
   }
 
-  // Mapeo simple de iconos de clima
   getWeatherIcon(state) {
     const icons = {
       'sunny': 'mdi:weather-sunny',
@@ -52,12 +50,26 @@ class AemetWeatherCard extends LitElement {
       return html`<ha-card><div class="error">Entidad no encontrada: ${this.config.entity}</div></ha-card>`;
     }
 
-    // Leemos la predicción (soporta la API moderna de forecast en hass o attributes)
-    const forecastHourly = stateObj.attributes.forecast || [];
-    const forecastDaily = stateObj.attributes.forecast_daily || [];
+    // Buscamos la previsión en atributos directos o en la entidad diaria de AEMET
+    let forecastHourly = stateObj.attributes.forecast || stateObj.attributes.forecast_hourly || [];
+    let forecastDaily = stateObj.attributes.forecast_daily || [];
+
+    // Si la entidad principal no tiene la previsión diaria, intentamos leer la entidad diaria de AEMET
+    if (forecastDaily.length === 0) {
+      const dailyEntityId = this.config.entity.replace('_hourly', '').replace('forecast_', 'forecast_daily_');
+      const dailyObj = this.hass.states[dailyEntityId] || this.hass.states['weather.forecast_casa_daily'] || this.hass.states['weather.aemet_daily'];
+      if (dailyObj && dailyObj.attributes) {
+        forecastDaily = dailyObj.attributes.forecast || dailyObj.attributes.forecast_daily || [];
+      }
+    }
+
+    // Si la previsión horaria sigue vacía, usamos la lista disponible
+    if (forecastHourly.length === 0 && forecastDaily.length > 0) {
+      forecastHourly = forecastDaily;
+    }
 
     const hourly12 = forecastHourly.slice(0, 12);
-    const daily7 = forecastDaily.slice(0, 7);
+    const daily7 = forecastDaily.length > 0 ? forecastDaily.slice(0, 7) : forecastHourly.slice(0, 7);
 
     return html`
       <ha-card>
@@ -66,9 +78,9 @@ class AemetWeatherCard extends LitElement {
           <!-- SECCIÓN 1: PREDICCIÓN HORARIA (12 HORAS SCROLL) -->
           <div class="section-title">Previsión 12 horas</div>
           <div class="hourly-carousel">
-            ${hourly12.map((item) => {
+            ${hourly12.length > 0 ? hourly12.map((item) => {
               const date = new Date(item.datetime);
-              const hourStr = `${date.getHours().toString().padStart(2, '0')}:00`;
+              const hourStr = !isNaN(date.getTime()) ? `${date.getHours().toString().padStart(2, '0')}:00` : '--:--';
               const uvVal = item.uv_index ?? item.uv ?? 0;
               const rainVal = item.precipitation ?? item.precipitation_probability ?? 0;
               const uvColor = this.getUvColor(uvVal);
@@ -77,7 +89,7 @@ class AemetWeatherCard extends LitElement {
                 <div class="hour-card">
                   <span class="hour-time">${hourStr}</span>
                   <ha-icon icon="${this.getWeatherIcon(item.condition || stateObj.state)}"></ha-icon>
-                  <span class="temp">${Math.round(item.temperature)}°C</span>
+                  <span class="temp">${Math.round(item.temperature ?? 0)}°C</span>
                   
                   <div class="sub-info rain">
                     <ha-icon icon="mdi:water-outline"></ha-icon>
@@ -90,7 +102,7 @@ class AemetWeatherCard extends LitElement {
                   </div>
                 </div>
               `;
-            })}
+            }) : html`<div class="no-data">Cargando datos horarios...</div>`}
           </div>
 
           <div class="divider"></div>
@@ -98,21 +110,21 @@ class AemetWeatherCard extends LitElement {
           <!-- SECCIÓN 2: PREDICCIÓN 7 DÍAS (HORIZONTAL) -->
           <div class="section-title">Previsión 7 días</div>
           <div class="daily-grid">
-            ${daily7.map((item) => {
+            ${daily7.length > 0 ? daily7.map((item) => {
               const date = new Date(item.datetime);
-              const dayName = date.toLocaleDateString('es-ES', { weekday: 'short' });
+              const dayName = !isNaN(date.getTime()) ? date.toLocaleDateString('es-ES', { weekday: 'short' }) : '---';
 
               return html`
                 <div class="day-card">
                   <span class="day-name">${dayName}</span>
                   <ha-icon icon="${this.getWeatherIcon(item.condition)}"></ha-icon>
                   <div class="temp-range">
-                    <span class="max">${Math.round(item.temperature)}°</span>
-                    <span class="min">${Math.round(item.templow ?? item.temperature_low ?? 0)}°</span>
+                    <span class="max">${Math.round(item.temperature ?? 0)}°</span>
+                    <span class="min">${Math.round(item.templow ?? item.temperature_low ?? item.templow_day ?? 0)}°</span>
                   </div>
                 </div>
               `;
-            })}
+            }) : html`<div class="no-data">Cargando datos diarios...</div>`}
           </div>
 
         </div>
@@ -242,6 +254,11 @@ class AemetWeatherCard extends LitElement {
       .error {
         padding: 16px;
         color: var(--error-color);
+      }
+      .no-data {
+        color: var(--secondary-text-color);
+        font-size: 0.85rem;
+        padding: 8px 0;
       }
     `;
   }

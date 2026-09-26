@@ -159,7 +159,6 @@ class AemetWeatherCard extends LitElement {
     return directions[bearing] || 0;
   }
 
-  // Color distintivo según el nivel de riesgo del Índice UV
   getUvColorClass(uvVal) {
     if (uvVal >= 11) return 'uv-extreme';
     if (uvVal >= 8) return 'uv-very-high';
@@ -230,6 +229,9 @@ class AemetWeatherCard extends LitElement {
     const maxTemp = temps.length ? Math.max(...temps) : 30;
     const tempRange = (maxTemp - minTemp) || 1;
 
+    // Comprobación de parámetro de configuración (por defecto true si no se especifica)
+    const showDaily = this.config.show_daily !== false;
+
     return html`
       <ha-card>
         <div class="card-content">
@@ -246,8 +248,6 @@ class AemetWeatherCard extends LitElement {
                   const rainProb = item.precipitation_probability ?? 0;
                   const windSpeed = Math.round(item.wind_speed ?? 0);
                   const windBearing = this.getWindRotation(item.wind_bearing);
-                  
-                  // Extracción de índice UV (si la API lo incluye en la previsión por horas)
                   const uvVal = item.uv_index !== undefined ? Math.round(item.uv_index) : 0;
 
                   const offsetY = 70 - (((temp - minTemp) / tempRange) * 50);
@@ -287,30 +287,31 @@ class AemetWeatherCard extends LitElement {
             </div>
           ` : html`<div class="no-data">Cargando horas...</div>`}
 
-          <div class="divider"></div>
+          ${showDaily ? html`
+            <div class="divider"></div>
+            <div class="header-title">Previsión Próximos Días</div>
+            ${dailyList.length > 0 ? html`
+              <div class="daily-grid">
+                ${dailyList.map((item) => {
+                  const date = new Date(item.datetime);
+                  const dayName = !isNaN(date.getTime()) ? date.toLocaleDateString('es-ES', { weekday: 'short' }) : '---';
 
-          <div class="header-title">Previsión Próximos Días</div>
-          ${dailyList.length > 0 ? html`
-            <div class="daily-grid">
-              ${dailyList.map((item) => {
-                const date = new Date(item.datetime);
-                const dayName = !isNaN(date.getTime()) ? date.toLocaleDateString('es-ES', { weekday: 'short' }) : '---';
-
-                return html`
-                  <div class="day-card">
-                    <span class="day-name">${dayName}</span>
-                    <div class="icon-container">
-                      ${this.renderWeatherIcon(item.condition, 34)}
+                  return html`
+                    <div class="day-card">
+                      <span class="day-name">${dayName}</span>
+                      <div class="icon-container">
+                        ${this.renderWeatherIcon(item.condition, 34)}
+                      </div>
+                      <div class="temp-range">
+                        <span class="max">${Math.round(item.temperature ?? 0)}°</span>
+                        <span class="min">${Math.round(item.templow ?? item.temperature_low ?? 0)}°</span>
+                      </div>
                     </div>
-                    <div class="temp-range">
-                      <span class="max">${Math.round(item.temperature ?? 0)}°</span>
-                      <span class="min">${Math.round(item.templow ?? item.temperature_low ?? 0)}°</span>
-                    </div>
-                  </div>
-                `;
-              })}
-            </div>
-          ` : html`<div class="no-data">Cargando previsión diaria...</div>`}
+                  `;
+                })}
+              </div>
+            ` : html`<div class="no-data">Cargando previsión diaria...</div>`}
+          ` : html``}
 
         </div>
       </ha-card>
@@ -441,7 +442,6 @@ class AemetWeatherCard extends LitElement {
         margin-bottom: 2px;
       }
 
-      /* ESTILOS PARA EL ÍNDICE UV */
       .uv-row {
         min-height: 28px;
       }

@@ -18,6 +18,8 @@ class AemetWeatherCard extends LitElement {
     super();
     this._hourlyForecast = [];
     this._dailyForecast = [];
+    this._subscribedHourly = false;
+    this._subscribedDaily = false;
   }
 
   setConfig(config) {
@@ -27,54 +29,78 @@ class AemetWeatherCard extends LitElement {
     this.config = config;
   }
 
-  // Se ejecuta automáticamente al cargar o actualizar la tarjeta en Home Assistant
+  connectedCallback() {
+    super.connectedCallback();
+    this._subscribeForecasts();
+  }
+
   updated(changedProperties) {
     if (changedProperties.has('hass') && this.hass && this.config) {
-      const oldHass = changedProperties.get('hass');
-      if (!oldHass || oldHass.states[this.config.entity] !== this.hass.states[this.config.entity]) {
-        this._fetchForecasts();
-      }
+      this._subscribeForecasts();
     }
   }
 
-  // Llamada moderna a la API de previsión de Home Assistant (AEMET)
-  async _fetchForecasts() {
+  async _subscribeForecasts() {
     if (!this.hass || !this.config.entity) return;
 
-    try {
-      // Intentamos pedir la previsión horaria mediante el servicio moderno
-      const resHourly = await this.hass.callWS({
-        type: 'weather/subscribe_forecast',
-        entity_id: this.config.entity,
-        forecast_type: 'hourly'
-      });
-      if (resHourly && resHourly.forecast) {
-        this._hourlyForecast = resHourly.forecast;
-      }
-    } catch (e) {
-      // Si falla la suscripción WS, leemos los atributos tradicionales por fallback
-      const stateObj = this.hass.states[this.config.entity];
-      if (stateObj && stateObj.attributes && stateObj.attributes.forecast) {
-        this._hourlyForecast = stateObj.attributes.forecast;
+    // 1. Obtener previsión horaria
+    if (!this._subscribedHourly) {
+      this._subscribedHourly = true;
+      try {
+        this.hass.connection.subscribeMessage(
+          (msg) => {
+            if (msg && msg.forecast) {
+              this._hourlyForecast = msg.forecast;
+              this.requestUpdate();
+            }
+          },
+          {
+            type: 'weather/subscribe_forecast',
+            entity_id: this.config.entity,
+            forecast_type: 'hourly'
+          }
+        );
+      } catch (e) {
+        console.warn("Suscripción horaria fallida, buscando fallback", e);
       }
     }
 
-    try {
-      // Intentamos pedir la previsión diaria
-      const resDaily = await this.hass.callWS({
-        type: 'weather/subscribe_forecast',
-        entity_id: this.config.entity,
-        forecast_type: 'daily'
-      });
-      if (resDaily && resDaily.forecast) {
-        this._dailyForecast = resDaily.forecast;
+    // 2. Obtener previsión diaria (prueba en la entidad base o en la entidad daily de AEMET)
+    if (!this._subscribedDaily) {
+      this._subscribedDaily = true;
+      
+      // Averiguar la entidad diaria (AEMET suele crear weather.aemet_diaria o similar)
+      let dailyEntity = this.config.entity;
+      if (!this.hass.states[dailyEntity]?.attributes?.forecast) {
+        const potentialDaily = dailyEntity.replace('hourly', 'daily').replace('_casa', '_casa_daily');
+        if (this.hass.states[potentialDaily]) {
+          dailyEntity = potentialDaily;
+        }
       }
-    } catch (e) {
-      const dailyEntityId = this.config.entity.replace('hourly', 'daily');
-      const dailyObj = this.hass.states[dailyEntityId] || this.hass.states['weather.forecast_casa_daily'];
-      if (dailyObj && dailyObj.attributes && dailyObj.attributes.forecast) {
-        this._dailyForecast = dailyObj.attributes.forecast;
+
+      try {
+        this.hass.connection.subscribeMessage(
+          (msg) => {
+            if (msg && msg.forecast) {
+              this._dailyForecast = msg.forecast;
+              this.requestUpdate();
+            }
+          },
+          {
+            type: 'weather/subscribe_forecast',
+            entity_id: dailyEntity,
+            forecast_type: 'daily'
+          }
+        );
+      } catch (e) {
+        console.warn("Suscripción diaria fallida", e);
       }
+    }
+
+    // Fallback: leer atributos antiguos si existen en el estado
+    const stateObj = this.hass.states[this.config.entity];
+    if (this._hourlyForecast.length === 0 && stateObj?.attributes?.forecast) {
+      this._hourlyForecast = stateObj.attributes.forecast;
     }
   }
 
@@ -110,7 +136,7 @@ class AemetWeatherCard extends LitElement {
     }
 
     const hourly12 = this._hourlyForecast.slice(0, 12);
-    const daily7 = this._dailyForecast.slice(0, 7);
+    const daily7 = this._dailyForecast.length > 0 ? this._dailyForecast.slice(0, 7) : this._hourlyForecast.slice(0, 7);
 
     return html`
       <ha-card>
@@ -143,7 +169,7 @@ class AemetWeatherCard extends LitElement {
                   </div>
                 </div>
               `;
-            }) : html`<div class="no-data">Obteniendo previsión horaria de AEMET...</div>`}
+            }) : html`<div class="no-data">Obteniendo previsión horaria...</div>`}
           </div>
 
           <div class="divider"></div>
@@ -165,7 +191,7 @@ class AemetWeatherCard extends LitElement {
                   </div>
                 </div>
               `;
-            }) : html`<div class="no-data">Obteniendo previsión diaria de AEMET...</div>`}
+            }) : html`<div class="no-data">Obteniendo previsión diaria...</div>`}
           </div>
 
         </div>

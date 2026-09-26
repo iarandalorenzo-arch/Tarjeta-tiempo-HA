@@ -153,11 +153,27 @@ class AemetWeatherCard extends LitElement {
       ? this._hourlyForecast 
       : (stateObj.attributes?.forecast || []);
 
-    const rawDailyList = this._dailyForecast.length > 0 
-      ? this._dailyForecast 
-      : this._getFallbackDaily();
+    // Combinar previsión diaria con fallback por horas para rellenar si faltan días
+    const fallbackDaily = this._getFallbackDaily();
+    const combinedDailyMap = {};
 
-    // Filtramos para ignorar el día de hoy y obtener los 7 días posteriores
+    // Primero insertamos el fallback
+    fallbackDaily.forEach(item => {
+      const dateStr = item.datetime.split('T')[0];
+      combinedDailyMap[dateStr] = item;
+    });
+
+    // Luego sobrescribimos con los datos diarios reales (tienen mayor precisión)
+    this._dailyForecast.forEach(item => {
+      if (item.datetime) {
+        const dateStr = item.datetime.split('T')[0];
+        combinedDailyMap[dateStr] = item;
+      }
+    });
+
+    const rawDailyList = Object.values(combinedDailyMap);
+
+    // Excluir el día de hoy y tomar los 7 días posteriores
     const todayStr = new Date().toISOString().split('T')[0];
     const dailyList = rawDailyList
       .filter(item => item.datetime && !item.datetime.startsWith(todayStr))

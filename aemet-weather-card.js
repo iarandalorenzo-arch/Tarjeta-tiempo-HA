@@ -43,7 +43,6 @@ class AemetWeatherCard extends LitElement {
   async _subscribeForecasts() {
     if (!this.hass || !this.config.entity) return;
 
-    // 1. Suscripción Horaria
     if (!this._subscribedHourly) {
       this._subscribedHourly = true;
       try {
@@ -65,11 +64,9 @@ class AemetWeatherCard extends LitElement {
       }
     }
 
-    // 2. Suscripción Diaria
     if (!this._subscribedDaily) {
       this._subscribedDaily = true;
       
-      // Probar con la entidad configurada o buscar variantes habituales de AEMET
       let dailyEntity = this.config.entity;
       if (dailyEntity.includes('hourly')) {
         dailyEntity = dailyEntity.replace('hourly', 'daily');
@@ -119,7 +116,6 @@ class AemetWeatherCard extends LitElement {
     return directions[bearing] || 0;
   }
 
-  // Fallback para generar días si la API de AEMET no devuelve array diario
   _getFallbackDaily() {
     if (!this._hourlyForecast || this._hourlyForecast.length === 0) return [];
     
@@ -154,17 +150,14 @@ class AemetWeatherCard extends LitElement {
       return html`<ha-card><div class="error">Entidad no encontrada: ${this.config.entity}</div></ha-card>`;
     }
 
-    // Datos por horas
     const hourlyList = this._hourlyForecast.length > 0 
       ? this._hourlyForecast 
       : (stateObj.attributes?.forecast || []);
 
-    // Datos diarios (con fallback automático)
     const dailyList = this._dailyForecast.length > 0 
       ? this._dailyForecast.slice(0, 7) 
       : this._getFallbackDaily();
 
-    // Rango térmico para la curva vertical
     const temps = hourlyList.map(i => i.temperature ?? 0);
     const minTemp = temps.length ? Math.min(...temps) : 0;
     const maxTemp = temps.length ? Math.max(...temps) : 30;
@@ -176,45 +169,47 @@ class AemetWeatherCard extends LitElement {
           <div class="header-title">Previsión por Horas</div>
 
           ${hourlyList.length > 0 ? html`
-            <div class="eltiempo-container">
-              ${hourlyList.map((item) => {
-                const date = new Date(item.datetime);
-                const hourStr = !isNaN(date.getTime()) ? `${date.getHours().toString().padStart(2, '0')}:00` : '--:--';
-                const temp = Math.round(item.temperature ?? 0);
-                const rainMm = item.precipitation ?? 0;
-                const rainProb = item.precipitation_probability ?? 0;
-                const windSpeed = Math.round(item.wind_speed ?? 0);
-                const windBearing = this.getWindRotation(item.wind_bearing);
+            <div class="scroll-wrapper">
+              <div class="eltiempo-container">
+                ${hourlyList.map((item) => {
+                  const date = new Date(item.datetime);
+                  const hourStr = !isNaN(date.getTime()) ? `${date.getHours().toString().padStart(2, '0')}:00` : '--:--';
+                  const temp = Math.round(item.temperature ?? 0);
+                  const rainMm = item.precipitation ?? 0;
+                  const rainProb = item.precipitation_probability ?? 0;
+                  const windSpeed = Math.round(item.wind_speed ?? 0);
+                  const windBearing = this.getWindRotation(item.wind_bearing);
 
-                const offsetY = 70 - (((temp - minTemp) / tempRange) * 50);
+                  const offsetY = 70 - (((temp - minTemp) / tempRange) * 50);
 
-                return html`
-                  <div class="hour-column">
-                    <div class="col-header">${hourStr}</div>
+                  return html`
+                    <div class="hour-column">
+                      <div class="col-header">${hourStr}</div>
 
-                    <div class="temp-plot-area">
-                      <div class="temp-point" style="transform: translateY(${offsetY}px);">
-                        <ha-icon icon="${this.getWeatherIcon(item.condition)}"></ha-icon>
-                        <span class="temp-val">${temp}°</span>
+                      <div class="temp-plot-area">
+                        <div class="temp-point" style="transform: translateY(${offsetY}px);">
+                          <ha-icon icon="${this.getWeatherIcon(item.condition)}"></ha-icon>
+                          <span class="temp-val">${temp}°</span>
+                        </div>
+                      </div>
+
+                      <div class="info-row rain-row">
+                        <span>${rainMm} mm</span>
+                        <span class="sub-percent">${rainProb}%</span>
+                      </div>
+
+                      <div class="info-row wind-row">
+                        <ha-icon 
+                          icon="mdi:arrow-down" 
+                          style="transform: rotate(${windBearing}deg);"
+                          class="wind-arrow"
+                        ></ha-icon>
+                        <span>${windSpeed} km/h</span>
                       </div>
                     </div>
-
-                    <div class="info-row rain-row">
-                      <span>${rainMm} mm</span>
-                      <span class="sub-percent">${rainProb}%</span>
-                    </div>
-
-                    <div class="info-row wind-row">
-                      <ha-icon 
-                        icon="mdi:arrow-down" 
-                        style="transform: rotate(${windBearing}deg);"
-                        class="wind-arrow"
-                      ></ha-icon>
-                      <span>${windSpeed} km/h</span>
-                    </div>
-                  </div>
-                `;
-              })}
+                  `;
+                })}
+              </div>
             </div>
           ` : html`<div class="no-data">Cargando horas...</div>`}
 
@@ -249,14 +244,26 @@ class AemetWeatherCard extends LitElement {
 
   static get styles() {
     return css`
+      :host {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+      }
       ha-card {
         background: var(--card-background-color, #ffffff);
         border-radius: 12px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         overflow: hidden;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
       }
       .card-content {
         padding: 16px;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
       }
       .header-title {
         font-size: 1.05rem;
@@ -270,13 +277,23 @@ class AemetWeatherCard extends LitElement {
         margin: 20px 0 16px 0;
       }
 
-      /* CARRUSEL HORARIO */
+      /* ENVOLTORIO QUE CONTROLA EL DESBORDAMIENTO */
+      .scroll-wrapper {
+        width: 100%;
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      /* CARRUSEL HORARIO SCROLLEABLE */
       .eltiempo-container {
         display: flex;
         overflow-x: auto;
+        overflow-y: hidden;
+        width: 100%;
         padding-bottom: 8px;
         scrollbar-width: thin;
         scrollbar-color: #0d6efd rgba(0, 0, 0, 0.05);
+        -webkit-overflow-scrolling: touch;
       }
       .eltiempo-container::-webkit-scrollbar {
         height: 6px;
@@ -292,10 +309,12 @@ class AemetWeatherCard extends LitElement {
 
       .hour-column {
         flex: 0 0 68px;
+        width: 68px;
         display: flex;
         flex-direction: column;
         border-right: 1px solid var(--divider-color, rgba(0, 0, 0, 0.08));
         text-align: center;
+        box-sizing: border-box;
       }
       .hour-column:last-child {
         border-right: none;
